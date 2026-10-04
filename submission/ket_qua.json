@@ -1,0 +1,85 @@
+{
+  "progress": {
+    "box_iou": "ok",
+    "nms": "ok",
+    "batched_nms": "ok",
+    "average_precision": "ok",
+    "mask_iou": "ok",
+    "polygon_to_mask": "ok",
+    "mask_to_yolo_seg": "ok",
+    "autolabel": "ok",
+    "oks": "ok",
+    "joint_angle": "ok",
+    "FLIP_IDX": "ok"
+  },
+  "latency": [
+    {
+      "Cấu hình": "one-to-many + NMS, conf 0.25",
+      "preprocess (ms)": 1.73,
+      "inference (ms)": 9.24,
+      "postprocess (ms)": 1.19,
+      "số box": 5
+    },
+    {
+      "Cấu hình": "one-to-many + NMS, conf 0.001",
+      "preprocess (ms)": 1.76,
+      "inference (ms)": 8.91,
+      "postprocess (ms)": 1.32,
+      "số box": 203
+    },
+    {
+      "Cấu hình": "one-to-one NMS-free, conf 0.25",
+      "preprocess (ms)": 1.73,
+      "inference (ms)": 9.43,
+      "postprocess (ms)": 0.43,
+      "số box": 5
+    },
+    {
+      "Cấu hình": "one-to-one NMS-free, conf 0.001",
+      "preprocess (ms)": 1.79,
+      "inference (ms)": 9.68,
+      "postprocess (ms)": 0.45,
+      "số box": 204
+    }
+  ],
+  "result_4b": {
+    "flip_idx": "giải phẫu",
+    "epochs": 40,
+    "imgsz": 640,
+    "Box mAP50-95": 0.9303488492063492,
+    "Pose mAP50": 0.995,
+    "Pose mAP50-95": 0.4573462529843696,
+    "train (phút)": 4.4
+  },
+  "result_4c": [
+    {
+      "Model": "flip_idx giải phẫu",
+      "Pose mAP50-95 — val gốc": 0.4573462529843696,
+      "Pose mAP50-95 — val lật gương": 0.43884777970456634
+    },
+    {
+      "Model": "flip_idx đồng nhất",
+      "Pose mAP50-95 — val gốc": 0.4169217121481716,
+      "Pose mAP50-95 — val lật gương": 0.29772304416546624
+    }
+  ],
+  "answers": {
+    "Q1": "(a) bus.jpg sau letterbox (640x480) có đúng 6 300 dự đoán thô. Lý do: trên 3 tầng feature map có stride 8, 16, 32, số cell lưới lần lượt là (80x60) + (40x30) + (20x15) = 4800 + 1200 + 300 = 6300 vị trí. Con số này ít hơn 8 400 của ảnh 640x640 vì chiều rộng giảm từ 640 xuống 480 px (giảm 25% số cell).\n(b) Nhãn gốc ở quy ước cxcywh (tâm và kích thước), nhưng đã bị đọc nhầm theo quy ước xywh (hoặc xyxy, coi tâm là góc trên-trái). Khi đặt góc trên-trái tại (cx, cy) thay vì (cx - w/2, cy - h/2), toàn bộ bounding box sẽ bị dịch sang phải đúng w/2 và xuống dưới đúng h/2.",
+    "Q2": "Từ bảng thực nghiệm latency trên máy của tôi:\n- Cột thay đổi nhiều nhất giữa hai head là 'postprocess (ms)': Ở head one-to-many, thời gian hậu xử lý là 1.190 ms (conf 0.25) và 1.320 ms (conf 0.001); trong khi ở head one-to-one NMS-free, postprocess giảm mạnh xuống chỉ còn 0.430 ms (conf 0.25) và 0.450 ms (conf 0.001) — giảm gần 3 lần (~66%).\n- Mức conf thấp (0.001) làm bộc lộ rõ nhất sự chênh lệch: Số lượng box vọt lên 203 box (so với 5 box ở conf 0.25), buộc thuật toán Greedy NMS phải tính toán so sánh IoU giữa hàng trăm cặp box, gây nghẽn postprocess.\n- Lợi ích của NMS-free càng vượt trội khi:\n  (1) Conf thấp / Cảnh đông đúc: Hàng ngàn candidate box phải qua NMS tuần tự O(N^2), trong khi NMS-free bỏ qua hoàn toàn bước này.\n  (2) Chạy trên CPU/NPU: Phần cứng nhúng không tối ưu cho vòng lặp greedy tuần tự có rẽ nhánh (branching) của NMS, khiến NMS trở thành nút thắt cổ chai lớn nhất của pipeline.",
+    "Q3": "(a) Với hai công nhân đứng sát nhau có IoU = 0.75:\n- Ở ngưỡng NMS 0.7, vì 0.75 > 0.7, box có score cao hơn sẽ triệt tiêu người kia -> bỏ sót 1 người (False Negative, đếm thiếu công nhân).\n- Đánh đổi khi điều chỉnh ngưỡng:\n  + Tăng ngưỡng IoU (ví dụ 0.85): Giúp giữ lại được 2 người đứng sát nhau, nhưng dễ giữ lại các box trùng lặp của cùng 1 người (tăng False Positive, đếm thừa).\n  + Giảm ngưỡng IoU (ví dụ 0.5): Lọc sạch triệt để box trùng lặp, nhưng tăng nguy cơ triệt tiêu nhầm những người đứng gần nhau.\n(b) YOLO26 vẫn train thêm head one-to-many dù head one-to-one không cần NMS vì:\n- Trong quá trình huấn luyện, head one-to-one chỉ gán đúng 1 positive sample cho mỗi ground-truth nên tín hiệu giám sát (gradient) rất thưa thớt, khiến backbone và neck học biểu diễn đặc trưng kém và hội tụ chậm.\n- Head one-to-many gán nhiều positive anchors cho mỗi ground-truth, cung cấp lượng gradient dày đặc và phong phú giúp trích xuất đặc trưng tối ưu hơn. Khi triển khai (inference), ta chỉ cần lấy output từ head one-to-one để suy luận NMS-free với tốc độ cao.",
+    "Q4": "(a) Đếm vùng liên thông trên bản đồ semantic cho ra kết quả sai (trên ảnh thực tế của tôi ra tới 8 vùng dù chỉ có 4 người):\n- Đếm thiếu: Khi 2 người đứng sát/chạm vào nhau, các pixel của họ nối liền thành một mảng liên thông duy nhất (mảng lớn nhất tới 106.186 pixel gộp cả 2 người thanh niên bên trái).\n- Đếm thừa: Khi một người bị che khuất hoặc các bộ phận bị đứt đoạn bởi bóng đổ/nhiễu pixel nhỏ (như các mẩu 17, 8, 4, 3 pixel trong kết quả), thuật toán đếm thành nhiều người độc lập.\n-> Panoptic segmentation giải quyết triệt để nhờ tách biệt: phân đoạn 'things' theo từng instance độc lập (có ID riêng cho từng người dù họ đứng chạm nhau) và 'stuff' cho vùng nền vô định hình (đường, cây cối).\n(b) Bản đồ semantic gán xe buýt vào class 'train' (chiếm tới 63% diện tích bên trong box). Nguyên nhân do tập Cityscapes thu thập tại các đô thị châu Âu có xe điện/tàu điện (tram/train) mang hình khối chữ nhật dài, cửa kính lớn rất giống với chiếc xe buýt lớn trong bus.jpg.",
+    "Q5": "(a) Sự khác biệt về độ mịn biên mask:\n- YOLO26-seg dùng 32 prototype map kích thước cố định (ví dụ 160x160) nhân với hệ số riêng của từng object. Với object nhỏ, diện tích trên prototype map chỉ chiếm vài pixel nên biên mask bị răng cưa và thô. Với object lớn, độ phân giải không gian cao nên đường biên rất mịn.\n- Mask R-CNN dự đoán mask 28x28 cho từng RoI rồi phóng to (upscale) về kích thước box thật. Với object lớn, mask 28x28 bị phóng to hàng chục lần làm nhòe và thô đường biên. Với object nhỏ, lưới 28x28 lại có độ chi tiết rất cao.\n(b) Nếu ghép tham lam theo 'IoU cao nhất': Khi có 2 mask của YOLO cùng có IoU cao nhất với cùng 1 mask Mask R-CNN (ví dụ hai box chồng lấn lên cùng một người), cả hai sẽ cùng lấy mask đó -> gây lỗi ghép trùng lặp (duplicate match), đồng thời bỏ sót mask Mask R-CNN khác trong ảnh. Hungarian matching giải quyết triệt để nhờ tối ưu song ánh (1-1) toàn cục (trong bài đạt IoU ghép cặp từ 0.842 đến 0.939 cho toàn bộ 5 đối tượng).",
+    "Q6": "(a) \n- Điểm A (ở giữa ngực/thân) tạo mask toàn bộ cơ thể người (diện tích 47.441 px, IoU = 0.99 với box prompt).\n- Điểm B (ở chân/ống quần) chỉ tạo mask một mảnh nhỏ của chiếc quần/ống chân (diện tích 2.714 px, IoU = 0.00).\n- Khi gán nhãn tự động, prompt bằng box an toàn hơn vì điểm đơn có tính mơ hồ quy mô (scale/part ambiguity - mô hình không biết người dùng muốn lấy cái áo, cái quần hay toàn bộ cơ thể người), trong khi bounding box khoanh vùng ranh giới rõ ràng của toàn bộ thực thể.\n(b) \n- Dùng SAM trực tiếp lúc triển khai: Khi bài toán là zero-shot / open-world, đối tượng chưa từng thấy trong tập train, hoặc trong các công cụ tương tác người dùng (như phần mềm click-to-segment), ứng dụng offline không yêu cầu thời gian thực.\n- Dùng SAM để tạo nhãn rồi train YOLO26-seg nhỏ: Khi cần triển khai real-time (30-60+ FPS) trên thiết bị biên (edge camera cổng, Jetson, NPU) với số lớp cố định, yêu cầu latency cực thấp (vài ms) và mô hình nhẹ (vài MB thay vì hàng trăm MB của SAM).",
+    "Q7": "- Khi đổi KP_THR = -100, Keypoint R-CNN vẽ các điểm đầu gối và mắt cá chân (vốn nằm ngoài khung hình) dồn cục bẹp dí ở mép dưới cùng của bức ảnh (tọa độ y dồn sát mức 700-718 px trên ảnh cao 720 px).\n- Điều này phản ánh bản chất của giải mã heatmap bằng argmax: argmax luôn bị ép buộc phải trả về một tọa độ pixel có giá trị kích hoạt lớn nhất trên feature map, ngay cả khi vùng đó chỉ toàn nhiễu hoặc đối tượng không hề tồn tại/bị cắt ngoài ảnh (argmax không có khái niệm 'no-detection').\n- Vì vậy, mỗi keypoint bắt buộc phải đi kèm một điểm tin cậy (confidence score / logit) để làm cổng lọc (thresholding), loại bỏ các tọa độ ảo nằm ngoài khung hình hoặc bị che khuất hoàn toàn, tránh gây sai lệch cho các phép tính góc và luật nghiệp vụ phía sau.",
+    "Q8": "Từ đồ thị thực nghiệm trên máy của tôi:\n- Với người nhỏ 40x80 px: Chỉ cần sai số Gauss khoảng 7 pixel là OKS đã tụt xuống dưới mức 0.5. Ngược lại, với người lớn 250x500 px, ngay cả khi sai số lên tới 30 pixel thì OKS vẫn đạt ~0.65 (phải sai số tới >40 pixel OKS mới giảm dưới 0.5).\n- Sigma (σ) của mắt (0.025) nhỏ hơn hông (0.107) nhiều lần vì mắt là điểm mốc giải phẫu cực kỳ rõ ràng, sắc nét (độ đồng thuận giữa các annotator rất cao), trong khi hông nằm ẩn dưới lớp quần áo dày, không có mốc xương nhô rõ rệt nên độ phân tán gán nhãn lớn. Cùng lệch 8 px, độ giống của mắt bị phạt tụt xuống 0.53 trong khi hông vẫn đạt tới 0.97.\n- Ý nghĩa với camera cổng gắn trên cao: Người nhìn từ camera cổng chỉ cao khoảng 80 px (diện tích s² rất nhỏ), dung sai pixel cho các chi tiết nhỏ như mắt/mũi là cực kỳ khắt khe (chỉ lệch 1-2 px OKS đã giảm mạnh). Do đó mô hình rất khó đạt OKS cao ở chi tiết nhỏ; các luật nghiệp vụ nên dựa vào các khớp thân lớn (vai, hông, gối) để đảm bảo độ tin cậy.",
+    "Q9": "(a) Đánh giá luật 'thân nghiêng > 60°':\n- Báo nhầm (False Alarm): Công nhân đang cúi người nhặt ốc vít/dụng cụ, bảo trì máy móc ở tầm thấp, buộc dây giày hoặc ngồi ngả lưng nghỉ ngơi (thân nghiêng > 60° nhưng hoàn toàn không bị ngã).\n- Bỏ sót (Missed Detection): Công nhân ngã dọc theo trục chiều sâu của camera (hướng nhìn thẳng từ đầu hoặc chân), trên ảnh 2D thân người vẫn có vẻ thẳng đứng hoặc bị co ngắn phối cảnh; hoặc công nhân ngã đập đầu ở tư thế ngồi kẹt vào máy.\n(b) Ảnh xoay 90° phát hiện ít người hơn (từ 5 người giảm xuống chỉ còn 3 người) vì: Mô hình detector tiền huấn luyện trên tập COCO chủ yếu học hình ảnh người ở tư thế thẳng đứng (upright). Data augmentation mặc định không có phép xoay 90°, khiến đặc trưng người nằm ngang khác biệt lớn và làm giảm recall nghiêm trọng.\n(c) Một hệ thống cảnh báo ngã thực tế cần thêm:\n1. Phân tích chuỗi thời gian (Temporal tracking): Theo dõi vận tốc rơi đột ngột theo phương thẳng đứng và trạng thái bất động kéo dài sau cú ngã (> 5-10 giây).\n2. Ước lượng mặt phẳng sàn (Floor plane estimation) hoặc cảm biến độ sâu 3D (cảm biến LiDAR/ToF).\n3. Logic ngữ cảnh loại trừ các khu vực cho phép ngồi/nghỉ ngơi trong nhà máy.",
+    "Q10": "- Nếu giữ flip_idx đồng nhất [0..11], mAP trên tập val gốc KHÔNG hề giảm (thậm chí vẫn đạt mức rất cao ~0.995) vì toàn bộ 53 con hổ ở tập val gốc cũng đều quay sang phải giống hệt 210 con hổ ở tập train. Mô hình chỉ cần ghi nhớ quy luật 'chân hướng về phía camera luôn là right_*' mà không hề bị phạt điểm.\n- Tình huống trở thành bug thật sự trong thực tế: Khi triển khai model vào hệ thống camera giám sát ngoài tự nhiên và gặp một con hổ quay sang TRÁI (đi từ phải sang trái). Khi đó, chân hướng về camera thực chất là chân trái (left_*), nhưng mô hình bị bias sẽ dự đoán nhầm thành chân phải (right_*), làm sai lệch hoàn toàn phân tích dáng đi (gait analysis), đo bước chân hoặc theo dõi hành vi cá thể.",
+    "Q11": "Nhìn vào 6 ảnh val tệ nhất (OKS từ 0.63 đến 0.66) và biểu đồ sai số theo keypoint trên máy của tôi:\n1. Kiểu lỗi 1 — Đảo chân trái/phải và che khuất lẫn nhau (Limb Swapping & Occlusion):\n- Minh chứng quan sát: Ở Frame_54.jpg, Frame_51.jpg và Frame_17.jpg, xuất hiện các vạch vàng kéo dài nối chéo giữa chân trái và chân phải. Khi con hổ bước đi, các chân sau hoặc chân trước bước so le che khuất lẫn nhau, mô hình bị nhầm lẫn giữa nhãn chân trái và chân phải hoặc kéo dự đoán dồn vào một chân nhìn thấy.\n- Khắc phục: Bổ sung nhãn visibility (cột nhãn thứ 3 cho keypoint: v=0, 1, 2 để phân biệt điểm bị che); tăng cường data augmentation che khuất (CutMix/Mosaic); áp dụng video tracking liên kết qua các frame để giữ vững tính nhất quán thời gian.\n\n2. Kiểu lỗi 2 — Bàn chân bị chìm vào nền cỏ/tiếp đất phức tạp (Camouflage at Ground/Grass):\n- Minh chứng quan sát: Biểu đồ cột chỉ ra cả 4 bàn chân (paw) có sai số lớn áp đảo so với các khớp phía trên, cao nhất là right_front_paw (sai số > 0.45) và left_hind_paw (~0.38). Bàn chân hổ nằm chìm trong thảm cỏ xanh, bị che bởi bóng đổ và thay đổi hình dạng khi tiếp đất, khiến việc định vị tâm bàn chân rất khó khăn.\n- Khắc phục: Bổ sung dữ liệu hổ bước trên nhiều địa hình đa dạng (đất cát, nền đá, tuyết); áp dụng hàm mất mát ràng buộc cấu trúc khung xương (kinematic chain loss) để khống chế khoảng cách giữa cổ chân (wrist/hock) và bàn chân (paw) không được vượt quá giới hạn sinh học.",
+    "Q12": "Việc dùng chung SIGMA_TIGER = 1/12 cho mọi keypoint là KHÔNG hợp lý:\n- Các bộ phận cơ thể có độ xác định hình học rất khác nhau: Mũi hổ (nose) là một điểm mốc giải phẫu cực kỳ nhỏ gọn, sắc nét trên khuôn mặt (trên biểu đồ thực tế sai số chỉ ~0.05, độ phân tán gán nhãn rất thấp, sigma cần nhỏ). Ngược lại, gốc đuôi (tail_base) hay u vai (withers) là vùng cơ thể rộng, phủ lông dày, không có khớp xương nhô sắc nét (độ phân tán giữa các annotator rất cao, sigma cần lớn hơn). Dùng cùng một sigma khiến OKS phạt quá nhẹ sai số ở mũi và phạt quá nặng ở gốc đuôi.\n- Cách ước lượng sigma cho dataset custom: Mời nhiều annotators (3-5 người) độc lập cùng gán nhãn trên một tập mẫu ảnh con hổ (~100 ảnh). Với mỗi keypoint i, tính độ lệch chuẩn vị trí của các annotators so với vị trí trung bình đã chuẩn hóa theo kích thước cơ thể: sigma_i^2 = E[d_i^2 / s^2], hoàn toàn tương tự quy chuẩn COCO."
+  },
+  "env": {
+    "device": "cuda",
+    "torch": "2.11.0+cu130",
+    "ultralytics": "8.4.171"
+  }
+}
